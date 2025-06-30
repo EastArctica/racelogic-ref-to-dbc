@@ -217,7 +217,7 @@ func parseSignalLines(lines []string) (map[uint32]*Message, bool, error) {
 	for i, line := range lines {
 		// Clean up trailing commas and split
 		parts := strings.Split(strings.Trim(line, " \t,"), ",")
-		if len(parts) < 12 {
+		if len(parts) < 11 {
 			fmt.Fprintf(os.Stderr, "Warning: skipping malformed line #%d (not enough fields): %s\n", i+1, line)
 			hasWarnings = true
 			continue
@@ -242,7 +242,22 @@ func parseSignalLines(lines []string) (map[uint32]*Message, bool, error) {
 		if strings.ToLower(parts[10]) == "intel" {
 			byteOrder = 1 // Intel (little-endian)
 		}
-		dlc, _ := strconv.Atoi(parts[11])
+
+		var dlc int
+		if len(parts) >= 12 {
+			dlc, err = strconv.Atoi(parts[11])
+			if err != nil {
+				// If DLC is present but not a valid number, warn and default to 8.
+				fmt.Fprintf(os.Stderr, "Warning: line #%d has invalid DLC '%s', assuming 8. Line: %s\n", i+1, parts[11], line)
+				hasWarnings = true
+				dlc = 8
+			}
+		} else {
+			// DLC is missing, assume default of 8 and notify user.
+			fmt.Fprintf(os.Stderr, "Info: line #%d is missing DLC field, assuming default of 8.\n", i+1)
+			hasWarnings = true
+			dlc = 8
+		}
 
 		// If message doesn't exist in our map, create it
 		if _, ok := messages[uint32(msgID)]; !ok {
@@ -251,6 +266,12 @@ func parseSignalLines(lines []string) (map[uint32]*Message, bool, error) {
 				Name: fmt.Sprintf("CAN_MSG_%d", msgID),
 				DLC:  dlc,
 				Node: defaultNode,
+			}
+		} else {
+			// If message already exists, ensure DLC is consistent.
+			// A larger DLC might be found on a later signal for the same message.
+			if dlc > messages[uint32(msgID)].DLC {
+				messages[uint32(msgID)].DLC = dlc
 			}
 		}
 
