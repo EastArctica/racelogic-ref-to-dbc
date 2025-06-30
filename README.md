@@ -21,7 +21,7 @@ You can download a pre-built program or build it yourself.
 If you have Go installed, you can build it from source.
 
 ```bash
-# 1. Make sure you have Go installed ([https://go.dev/dl/](https://go.dev/dl/))
+# 1. Make sure you have Go installed (https://go.dev/dl/)
 # 2. Clone the repo and navigate into it
 git clone [https://github.com/EastArctica/racelogic-ref-to-dbc.git](https://github.com/EastArctica/racelogic-ref-to-dbc.git)
 cd racelogic-ref-to-dbc
