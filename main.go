@@ -39,57 +39,76 @@ type Message struct {
 }
 
 // main is the entry point for the program. It handles command-line arguments,
-// file I/O, and orchestrates the parsing process.
+// file I/O, and orchestrates the parsing process for multiple files.
 func main() {
 	// Define command-line flags for input and output files.
-	inputFile := flag.String("i", "", "Input file path. Can also be provided as the first argument.")
-	outputFile := flag.String("o", "", "Output file path. (Optional: Defaults to input filename with .dbc extension)")
+	inputFileFlag := flag.String("i", "", "Input file path. Can be used with positional arguments.")
+	outputFileFlag := flag.String("o", "", "Output file path. (Only used when a single input file is provided)")
 	flag.Parse()
 
-	// Determine the input file path.
-	if *inputFile == "" {
-		if flag.NArg() < 1 {
-			fmt.Println("Error: No input file specified.")
-			fmt.Println("Usage: go run . -i <inputfile> [-o <outputfile>]")
-			fmt.Println("Or:    go run . <inputfile>")
-			os.Exit(1)
-		}
-		*inputFile = flag.Arg(0)
+	// Collect all input files from both the -i flag and positional arguments.
+	inputFiles := []string{}
+	if *inputFileFlag != "" {
+		inputFiles = append(inputFiles, *inputFileFlag)
 	}
+	inputFiles = append(inputFiles, flag.Args()...)
 
-	// Determine the output file path.
-	if *outputFile == "" {
-		ext := filepath.Ext(*inputFile)
-		baseName := strings.TrimSuffix(filepath.Base(*inputFile), ext)
-		*outputFile = filepath.Join(filepath.Dir(*inputFile), baseName+".dbc")
-	}
-
-	fmt.Printf("Input file:  %s\n", *inputFile)
-	fmt.Printf("Output file: %s\n", *outputFile)
-
-	// Process the file.
-	hasWarnings, err := processFile(*inputFile, *outputFile)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "\n--- ERROR ---\n")
-		fmt.Fprintf(os.Stderr, "An error occurred: %v\n", err)
-		fmt.Fprintf(os.Stderr, "-------------\n")
-		// This pause allows the user to see the error when dragging and dropping.
-		fmt.Println("Press Enter to exit.")
-		bufio.NewReader(os.Stdin).ReadBytes('\n')
+	// If no files are provided, show usage and exit.
+	if len(inputFiles) == 0 {
+		fmt.Println("Error: No input file specified.")
+		fmt.Println("Usage: racelogic-ref-to-dbc [options] <file1> <file2> ...")
+		fmt.Println("Options:")
+		flag.PrintDefaults()
 		os.Exit(1)
 	}
 
-	fmt.Println("Successfully processed file and generated DBC.")
+	// Warn user if -o is used with multiple files, as it will be ignored.
+	if len(inputFiles) > 1 && *outputFileFlag != "" {
+		fmt.Println("Warning: -o flag is ignored when more than one input file is provided.")
+	}
 
-	// If any non-fatal warnings occurred, pause to let the user see them.
-	if hasWarnings {
-		fmt.Println("\nNOTE: Warnings were issued during processing (see details above).")
+	var hadAnyIssues bool
+	var filesProcessed int
+
+	// Process each file provided.
+	for _, currentInput := range inputFiles {
+		fmt.Printf("\n--- Processing file: %s ---\n", currentInput)
+
+		var currentOutput string
+		// Determine output path. Use -o only if one file is being processed.
+		if len(inputFiles) == 1 && *outputFileFlag != "" {
+			currentOutput = *outputFileFlag
+		} else {
+			ext := filepath.Ext(currentInput)
+			baseName := strings.TrimSuffix(filepath.Base(currentInput), ext)
+			currentOutput = filepath.Join(filepath.Dir(currentInput), baseName+".dbc")
+		}
+		fmt.Printf("Output will be written to: %s\n", currentOutput)
+
+		hasWarnings, err := processFile(currentInput, currentOutput)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "ERROR processing %s: %v\n", currentInput, err)
+			hadAnyIssues = true
+			continue // Move to the next file
+		}
+		if hasWarnings {
+			hadAnyIssues = true
+		}
+		filesProcessed++
+	}
+
+	fmt.Printf("\n--- Finished ---\n")
+	fmt.Printf("Successfully processed %d out of %d file(s).\n", filesProcessed, len(inputFiles))
+
+	// If any error or warning occurred during the entire run, pause for user to see.
+	if hadAnyIssues {
+		fmt.Println("\nNOTE: Errors or warnings were issued during processing (see details above).")
 		fmt.Println("Press Enter to exit.")
 		bufio.NewReader(os.Stdin).ReadBytes('\n')
 	}
 }
 
-// processFile handles the opening, parsing, and writing of the data.
+// processFile handles the opening, parsing, and writing of the data for a single file.
 // It returns a boolean indicating if any warnings occurred, and an error for fatal issues.
 func processFile(inputPath, outputPath string) (bool, error) {
 	var hasWarnings bool
@@ -158,7 +177,7 @@ func processFile(inputPath, outputPath string) (bool, error) {
 	_, err = reader.ReadByte()
 	if err == nil {
 		// If we successfully read a byte, it means there's extra data.
-		fmt.Println("\nWarning: The file was processed, but there is unparsed data remaining at the end of the file.")
+		fmt.Println("Warning: The file was processed, but there is unparsed data remaining at the end of the file.")
 		hasWarnings = true
 		// We don't need to do anything with the extra data, just notify the user.
 	} else if err != io.EOF {
