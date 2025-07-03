@@ -303,7 +303,7 @@ func writeDBC(messages map[uint32]*Message, w *bufio.Writer) error {
 	w.WriteString("\nBS_:\n\n")
 
 	// Write Nodes
-	defaultNode := "VECTOR__XXX"
+	defaultNode := "Vector__XXX"
 	w.WriteString(fmt.Sprintf("BU_: %s\n\n", defaultNode))
 
 	// Get and sort message IDs for consistent output order
